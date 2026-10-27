@@ -39,7 +39,7 @@ class TransactionInput(BaseModel):
         description="Customer acquisition marketing channel",
         json_schema_extra={"example": "SEO"},
     )
-    browser: Literal["Chrome", "Safari", "Firefox", "Opera", "IE"] = Field(
+    browser: Literal["Chrome", "Safari", "FireFox", "Firefox", "Opera", "IE"] = Field(
         ..., description="Client browser identifier", json_schema_extra={"example": "Chrome"}
     )
     sex: Literal["M", "F"] = Field(

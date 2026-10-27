@@ -149,7 +149,12 @@ class FraudFeatureTransformer(BaseEstimator, TransformerMixin):
             res[f"source_{source}"] = (df["source"] == source).astype(np.int32)
 
         for browser in ["Chrome", "Safari", "Firefox", "Opera", "IE"]:
-            res[f"browser_{browser}"] = (df["browser"] == browser).astype(np.int32)
+            if browser == "Firefox":
+                res[f"browser_{browser}"] = (df["browser"].isin(["Firefox", "FireFox"])).astype(
+                    np.int32
+                )
+            else:
+                res[f"browser_{browser}"] = (df["browser"] == browser).astype(np.int32)
 
         # Country one-hot encoding
         countries = self.ip_lookup.lookup(df["ip_address"].values)
@@ -191,7 +196,7 @@ class FraudFeatureTransformer(BaseEstimator, TransformerMixin):
             1.0 if tx.source == "Direct" else 0.0,
             1.0 if tx.browser == "Chrome" else 0.0,
             1.0 if tx.browser == "Safari" else 0.0,
-            1.0 if tx.browser == "Firefox" else 0.0,
+            1.0 if tx.browser in ("Firefox", "FireFox") else 0.0,
             1.0 if tx.browser == "Opera" else 0.0,
             1.0 if tx.browser == "IE" else 0.0,
         ]

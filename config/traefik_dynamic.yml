@@ -1,4 +1,4 @@
-# Dynamic configuration for Traefik Weighted Round-Robin (WRR) Canary Traffic Splitting
+# Dynamic configuration for Traefik WRR Canary Traffic Splitting
 http:
   routers:
     fraud-api-router:
