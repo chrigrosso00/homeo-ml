@@ -1,0 +1,27 @@
+# Dynamic configuration for Traefik Weighted Round-Robin (WRR) Canary Traffic Splitting
+http:
+  routers:
+    fraud-api-router:
+      rule: "PathPrefix(`/`)"
+      service: fraud-canary-weighted-service
+      entryPoints:
+        - web
+
+  services:
+    fraud-canary-weighted-service:
+      weighted:
+        services:
+          - name: production-service
+            weight: 100
+          - name: canary-service
+            weight: 0
+
+    production-service:
+      loadBalancer:
+        servers:
+          - url: "http://serving-prod:8000"
+
+    canary-service:
+      loadBalancer:
+        servers:
+          - url: "http://serving-canary:8000"

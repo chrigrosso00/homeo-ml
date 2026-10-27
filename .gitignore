@@ -57,7 +57,7 @@ htmlcov/
 # Data & Models (tracked via DVC or MinIO/S3)
 data/raw/
 data/processed/
-artifacts/models/
+artifacts/
 *.onnx
 *.joblib
 *.pkl

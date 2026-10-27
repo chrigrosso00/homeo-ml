@@ -31,5 +31,19 @@ services:
       redpanda:
         condition: service_healthy
 
+  traefik:
+    image: traefik:v3.0
+    container_name: mlops-traefik
+    command:
+      - --api.insecure=true
+      - --providers.file.filename=/etc/traefik/dynamic.yml
+      - --providers.file.watch=true
+      - --entryPoints.web.address=:80
+    ports:
+      - "80:80"
+      - "8081:8080" # Traefik dashboard
+    volumes:
+      - ./config/traefik_dynamic.yml:/etc/traefik/dynamic.yml
+
 volumes:
   redpanda_data:
