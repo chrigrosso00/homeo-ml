@@ -96,10 +96,11 @@ class FraudFeatureTransformer(BaseEstimator, TransformerMixin):
         self.top_countries_count = top_countries_count
         self.ip_lookup = IpCountryLookup(ip_mapping_path)
         self.top_countries_: list[str] = []
+        self.device_counts_: dict[str, int] = {}
         self.feature_names_: list[str] = []
 
     def fit(self, X: pd.DataFrame, y: Any = None) -> "FraudFeatureTransformer":
-        """Fit transformer by learning high-frequency countries and schema.
+        """Fit transformer by learning high-frequency countries, device frequencies, and schema.
 
         Args:
             X: Input DataFrame with raw transactions.
@@ -113,6 +114,7 @@ class FraudFeatureTransformer(BaseEstimator, TransformerMixin):
         self.top_countries_ = list(
             country_counts[country_counts.index != "Unknown"].head(self.top_countries_count).index
         )
+        self.device_counts_ = X["device_id"].value_counts().to_dict()
         return self
 
     def transform_df(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -136,6 +138,9 @@ class FraudFeatureTransformer(BaseEstimator, TransformerMixin):
         res["is_instant_purchase"] = (res["time_since_signup_sec"] < 5.0).astype(np.int32)
         res["hour_of_day"] = purchase.dt.hour.astype(np.int32)
         res["day_of_week"] = purchase.dt.dayofweek.astype(np.int32)
+        res["device_sharing_count"] = (
+            df["device_id"].map(self.device_counts_).fillna(1.0).astype(np.float32)
+        )
 
         # Categoricals
         res["sex_M"] = (df["sex"] == "M").astype(np.int32)
@@ -170,6 +175,7 @@ class FraudFeatureTransformer(BaseEstimator, TransformerMixin):
         purchase = tx.purchase_time
         time_diff = max((purchase - signup).total_seconds(), 0.0)
         country = str(self.ip_lookup.lookup(tx.ip_address))
+        device_count = float(self.device_counts_.get(tx.device_id, 1.0))
 
         feature_values: list[float] = [
             float(tx.purchase_value),
@@ -178,6 +184,7 @@ class FraudFeatureTransformer(BaseEstimator, TransformerMixin):
             1.0 if time_diff < 5.0 else 0.0,
             float(purchase.hour),
             float(purchase.weekday()),
+            device_count,
             1.0 if tx.sex == "M" else 0.0,
             1.0 if tx.source == "SEO" else 0.0,
             1.0 if tx.source == "Ads" else 0.0,
