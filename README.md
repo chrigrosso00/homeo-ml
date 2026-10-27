@@ -121,13 +121,20 @@ docker compose up -d
 > Access Redpanda Web Console at: **`http://localhost:8080`**
 
 ### 3. Run the Automated Closed-Loop Demo
-Execute the all-in-one demonstration script:
+Execute the demonstration with your preferred pacing mode:
 ```bash
-./demo.sh
+# Guided interactive mode (press [ENTER] to advance and inspect each phase)
+./demo.sh --mode step
+
+# Paced automatic mode (default: 2.0s delay with educational callouts)
+./demo.sh --mode auto
+
+# Lightning mode (immediate execution for CI/CD)
+./demo.sh --mode fast
 ```
 Or run directly with Python:
 ```bash
-python -m scripts.demo_closed_loop
+python -m scripts.demo_closed_loop --mode step
 ```
 
 ### What the Demo Executes:

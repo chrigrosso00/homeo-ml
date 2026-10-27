@@ -37,8 +37,22 @@ if command -v docker &>/dev/null; then
 fi
 
 echo ""
-echo "Launching Closed-Loop Self-Healing Pipeline..."
-"${PYTHON_BIN}" -m scripts.demo_closed_loop
+echo "Opzioni disponibili per il controllo dell'avanzamento:"
+echo "  • ./demo.sh --mode step       (avanza manualmente premendo [INVIO])"
+echo "  • ./demo.sh --mode auto       (avanza con pause temporizzate di 2s)"
+echo "  • ./demo.sh --mode fast       (esecuzione immediata senza pause)"
+echo ""
+
+# Forward any user arguments or default to --mode auto --delay 2.0
+if [[ $# -eq 0 ]]; then
+    ARGS=(--mode auto --delay 2.0)
+else
+    ARGS=("$@")
+fi
+
+echo "Avvio della Pipeline con argomenti: ${ARGS[*]}"
+echo ""
+"${PYTHON_BIN}" -m scripts.demo_closed_loop "${ARGS[@]}"
 
 echo ""
 echo "================================================================================"
