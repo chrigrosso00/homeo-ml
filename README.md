@@ -13,7 +13,7 @@
 
 ---
 
-## 📌 Executive Summary & Architectural Motivation
+## Executive Summary & Architectural Motivation
 
 In high-throughput e-commerce fraud detection, production ML models suffer from **silent performance degradation**:
 1. **Adversarial Drift**: Fraud rings constantly shift tactics (e.g. rotating IP subnets, browser fingerprint spoofing, coordinated rapid-fire registrations).
@@ -28,7 +28,7 @@ This project addresses these challenges by implementing an **Autonomous Self-Hea
 
 ---
 
-## 🏛 Architecture Diagram
+## Architecture Diagram
 
 ```mermaid
 flowchart TD
@@ -65,7 +65,7 @@ flowchart TD
 
 ---
 
-## 🔍 Key Architectural Decisions & Trade-Offs
+## Key Architectural Decisions & Trade-Offs
 
 | Decision | Option Chosen | Alternative Evaluated | Why Chosen |
 | :--- | :--- | :--- | :--- |
@@ -77,7 +77,7 @@ flowchart TD
 
 ---
 
-## 📊 Dataset & Feature Engineering
+## Dataset & Feature Engineering
 
 The system uses a real-world e-commerce fraud dataset consisting of:
 - **151,112 real fraud transactions** with a 9.36% positive class balance.
@@ -93,7 +93,7 @@ Features are generated through a unified `FraudFeatureTransformer` that operates
 
 ---
 
-## 🚀 Quickstart & Interactive Demo
+## Quickstart & Interactive Demo
 
 ### Prerequisites
 - Linux / macOS with Python 3.11+
@@ -151,7 +151,7 @@ python -m scripts.demo_closed_loop --mode step
 
 ---
 
-## 🧪 Testing & Quality Assurance
+## Testing & Quality Assurance
 
 This repository adheres to strict software engineering standards:
 - **Linting & Code Quality**: `ruff check .`
@@ -171,7 +171,7 @@ Output:
 
 ---
 
-## 📁 Repository Structure
+## Repository Structure
 
 ```text
 ├── artifacts/
@@ -206,7 +206,3 @@ Output:
 ```
 
 ---
-
-## 📄 License
-
-Distributed under the Apache 2.0 License. See `LICENSE` for details.
