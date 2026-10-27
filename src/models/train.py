@@ -208,6 +208,33 @@ def train_baseline_pipeline(
     )
     default_f1 = float(default_report["Fraud"]["f1-score"])
 
+    # Step 7: Export statistical reference baseline dataset for Evidently drift monitoring
+    print("Step 7: Generating reference dataset for Evidently drift monitoring...")
+    ref_sample = train_df.sample(n=min(5000, len(train_df)), random_state=42).copy()
+    ref_countries = transformer.ip_lookup.lookup(ref_sample["ip_address"].values)
+    ref_sample["country"] = ref_countries
+    ref_sample["time_since_signup_sec"] = (
+        (pd.to_datetime(ref_sample["purchase_time"]) - pd.to_datetime(ref_sample["signup_time"]))
+        .dt.total_seconds()
+        .clip(lower=0.0)
+    )
+
+    ref_X = transformer.transform_df(ref_sample).values.astype(np.float32)
+    ref_sample["fraud_probability"] = clf.predict_proba(ref_X)[:, 1]
+
+    ref_cols = [
+        "purchase_value",
+        "age",
+        "time_since_signup_sec",
+        "source",
+        "browser",
+        "sex",
+        "country",
+        "fraud_probability",
+    ]
+    reference_path = artifacts_dir / "reference_data.parquet"
+    ref_sample[ref_cols].to_parquet(reference_path, index=False)
+
     metadata: dict[str, Any] = {
         "model_version": model_version,
         "algorithm": "LightGBM",
@@ -235,6 +262,7 @@ def train_baseline_pipeline(
         "artifacts": {
             "onnx_model": str(onnx_path),
             "transformer": str(transformer_path),
+            "reference_data": str(reference_path),
         },
     }
 
