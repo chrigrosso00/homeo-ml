@@ -207,3 +207,30 @@ def test_guardrails_failure_triggers_rollback(
     prod_w, canary_w = traffic_manager.get_current_weights()
     assert prod_w == 100
     assert canary_w == 0
+
+
+def test_canary_evaluation_promotion_and_rollback(
+    supervisor: StateMachineSupervisor,
+) -> None:
+    """Verify evaluate_canary_window approves promotion on win and aborts on regression."""
+    # Case 1: Canary outperforms Production
+    prod_metrics = {"f1_score": 0.50, "roc_auc": 0.72}
+    canary_metrics = {"f1_score": 0.86, "roc_auc": 0.88}
+
+    should_promote, reason = supervisor.evaluate_canary_window(
+        production_metrics=prod_metrics,
+        canary_metrics=canary_metrics,
+        metric_key="f1_score",
+    )
+    assert should_promote is True
+    assert "Promotion approved" in reason
+
+    # Case 2: Canary regresses compared to Production
+    regressed_canary = {"f1_score": 0.45, "roc_auc": 0.68}
+    should_promote, reason = supervisor.evaluate_canary_window(
+        production_metrics=prod_metrics,
+        canary_metrics=regressed_canary,
+        metric_key="f1_score",
+    )
+    assert should_promote is False
+    assert "Rollback triggered" in reason

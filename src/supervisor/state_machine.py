@@ -17,6 +17,10 @@ import onnxruntime as ort
 from pydantic import BaseModel, Field
 
 from src.models.train import DEFAULT_DATA_PATH, train_baseline_pipeline
+from src.models.train_mobility import (
+    DEFAULT_TAXI_DIR,
+    train_mobility_recent_window,
+)
 from src.monitoring.drift_detector import DriftReport
 
 logger = logging.getLogger("supervisor.fsm")
@@ -43,6 +47,8 @@ class GuardrailsConfig(BaseModel):
 
     min_pr_auc: float = Field(default=0.045, description="Minimum acceptable PR-AUC")
     min_recall: float = Field(default=0.85, description="Minimum fraud recall rate")
+    min_roc_auc: float = Field(default=0.70, description="Minimum ROC-AUC for mobility")
+    min_f1: float = Field(default=0.65, description="Minimum F1 score for mobility")
     max_latency_p95_ms: float = Field(default=20.0, description="Maximum P95 latency in ms")
 
 
@@ -276,18 +282,60 @@ class StateMachineSupervisor:
 
         return True, "All guardrails passed successfully."
 
+    def evaluate_canary_window(
+        self,
+        production_metrics: dict[str, float],
+        canary_metrics: dict[str, float],
+        metric_key: str = "f1_score",
+        min_improvement_margin: float = 0.0,
+    ) -> tuple[bool, str]:
+        """Statistically compare real traffic performance between production and canary services.
+
+        Args:
+            production_metrics: Metrics computed from live traffic served by production.
+            canary_metrics: Metrics computed from live traffic served by canary.
+            metric_key: Target evaluation metric name (e.g. 'f1_score' or 'roc_auc').
+            min_improvement_margin: Minimum margin by which canary must exceed production.
+
+        Returns:
+            Tuple of (should_promote: bool, reason: str).
+        """
+        prod_val = production_metrics.get(metric_key, 0.0)
+        canary_val = canary_metrics.get(metric_key, 0.0)
+
+        diff = canary_val - prod_val
+        if diff >= min_improvement_margin:
+            msg = (
+                f"Canary {metric_key} ({canary_val:.4f}) outperforms "
+                f"Production ({prod_val:.4f}) by {diff:+.4f}. Promotion approved."
+            )
+            return True, msg
+
+        msg = (
+            f"Canary {metric_key} ({canary_val:.4f}) did not beat "
+            f"Production ({prod_val:.4f}) by margin {min_improvement_margin}. Rollback triggered."
+        )
+        return False, msg
+
     def run_healing_cycle(
         self,
         report: DriftReport,
         data_path: Path = DEFAULT_DATA_PATH,
         canary_artifacts_dir: Path = Path("artifacts/canary"),
+        domain: str = "fraud",
+        canary_eval_metrics: tuple[dict[str, float], dict[str, float]] | None = None,
     ) -> SupervisorState:
         """Execute autonomous end-to-end self-healing cycle.
+
+        Supports multi-domain self-healing (fraud or urban mobility) and real
+        metric-driven canary evaluation.
 
         Args:
             report: Incoming DriftReport.
             data_path: Dataset path for retraining.
             canary_artifacts_dir: Destination for canary model artifacts.
+            domain: Domain name ('fraud' or 'mobility').
+            canary_eval_metrics: Optional tuple of (prod_metrics, canary_metrics) from live traffic.
 
         Returns:
             Final SupervisorState reached by the FSM.
@@ -300,7 +348,10 @@ class StateMachineSupervisor:
         self.transition_to(
             SupervisorState.DRIFT_DETECTED,
             event="DRIFT_THRESHOLD_EXCEEDED",
-            details={"share_drifted": report.share_of_drifted_features},
+            details={
+                "domain": domain,
+                "share_drifted": report.share_of_drifted_features,
+            },
         )
 
         # 2. DIAGNOSING_SLICE
@@ -312,24 +363,34 @@ class StateMachineSupervisor:
         )
 
         # 3. RETRAINING_CANDIDATE
+        target_version = f"v1.1.0-canary-{datetime.now(UTC).strftime('%Y%m%d%H%M')}"
         self.transition_to(
             SupervisorState.RETRAINING_CANDIDATE,
             event="START_CANDIDATE_TRAINING",
-            details={"target_version": "v1.1.0-canary"},
+            details={"target_version": target_version, "domain": domain},
         )
         canary_artifacts_dir.mkdir(parents=True, exist_ok=True)
-        candidate_meta = train_baseline_pipeline(
-            data_path=data_path,
-            artifacts_dir=canary_artifacts_dir,
-            model_version="v1.1.0-canary",
-        )
-        candidate_onnx = canary_artifacts_dir / "fraud_model.onnx"
+
+        if domain == "mobility":
+            candidate_meta = train_mobility_recent_window(
+                data_dir=DEFAULT_TAXI_DIR,
+                artifacts_dir=canary_artifacts_dir,
+                model_version=target_version,
+            )
+            candidate_onnx = canary_artifacts_dir / "mobility_model.onnx"
+        else:
+            candidate_meta = train_baseline_pipeline(
+                data_path=data_path,
+                artifacts_dir=canary_artifacts_dir,
+                model_version=target_version,
+            )
+            candidate_onnx = canary_artifacts_dir / "fraud_model.onnx"
 
         # 4. VALIDATING_GUARDRAILS
         self.transition_to(
             SupervisorState.VALIDATING_GUARDRAILS,
             event="EVALUATING_SAFETY_GUARDRAILS",
-            details={"candidate_version": "v1.1.0-canary"},
+            details={"candidate_version": target_version},
         )
         passed, reason = self.validate_candidate(candidate_meta, candidate_onnx)
 
@@ -350,19 +411,42 @@ class StateMachineSupervisor:
         )
         self.traffic_manager.set_weights(production_weight=95, canary_weight=5)
 
-        # 6. PROMOTED (Simulated healthy canary window promotion -> 100%)
+        # 6. EVALUATE LIVE CANARY TRAFFIC (Real metric comparison vs Simulated fallback)
+        if canary_eval_metrics is not None:
+            prod_m, canary_m = canary_eval_metrics
+            should_promote, eval_reason = self.evaluate_canary_window(
+                production_metrics=prod_m,
+                canary_metrics=canary_m,
+                metric_key=("f1_score" if domain == "mobility" else "optimal_f1"),
+            )
+            if not should_promote:
+                self.transition_to(
+                    SupervisorState.ROLLBACK,
+                    event="CANARY_PERFORMANCE_REGRESSION",
+                    details={"reason": eval_reason},
+                )
+                self.traffic_manager.set_weights(production_weight=100, canary_weight=0)
+                return self.current_state
+        else:
+            eval_reason = "Simulated healthy canary traffic observation window."
+
+        # 7. PROMOTED -> 100% Canary
         self.transition_to(
             SupervisorState.PROMOTED,
             event="PROMOTE_CANARY_TO_PRODUCTION",
-            details={"promoted_version": "v1.1.0-canary", "traffic_split": "0/100"},
+            details={
+                "promoted_version": target_version,
+                "traffic_split": "0/100",
+                "evaluation": eval_reason,
+            },
         )
         self.traffic_manager.set_weights(production_weight=0, canary_weight=100)
 
-        # Return to monitoring with new baseline
+        # 8. Return to monitoring with new baseline
         self.transition_to(
             SupervisorState.IDLE_MONITORING,
             event="HEALING_CYCLE_COMPLETE",
-            details={"active_version": "v1.1.0-canary"},
+            details={"active_version": target_version},
         )
 
         return self.current_state

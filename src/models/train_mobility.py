@@ -307,6 +307,116 @@ def train_mobility_pipeline(
     return metadata
 
 
+def train_mobility_recent_window(
+    data_dir: Path = DEFAULT_TAXI_DIR,
+    artifacts_dir: Path = Path("artifacts/canary_mobility"),
+    model_version: str = "v1.1.0-canary",
+    recent_month: str = "2020-03",
+    sample_size: int = 40_000,
+) -> dict[str, Any]:
+    """Retrain candidate model on the most recent data window to adapt to drift.
+
+    Args:
+        data_dir: Root directory of taxi parquet records.
+        artifacts_dir: Destination path for canary model and transformer.
+        model_version: Target semantic release version.
+        recent_month: Most recent month identifier reflecting drifted conditions.
+        sample_size: Number of recent samples used for retraining.
+
+    Returns:
+        Metadata dictionary for the newly trained candidate model.
+    """
+    artifacts_dir.mkdir(parents=True, exist_ok=True)
+    recent_file = data_dir / f"yellow_tripdata_{recent_month}.parquet"
+    if not recent_file.exists():
+        raise FileNotFoundError(f"Recent window file {recent_file} not found")
+
+    raw = pd.read_parquet(recent_file)
+    raw["tpep_pickup_datetime"] = pd.to_datetime(raw["tpep_pickup_datetime"])
+    # Sort chronologically to preserve real-world causality
+    sorted_df = raw.sort_values("tpep_pickup_datetime").reset_index(drop=True)
+    # Take the most recent samples
+    recent_slice = sorted_df.tail(sample_size).copy()
+    cleaned = clean_and_label_taxi_data(recent_slice)
+
+    split_idx = int(len(cleaned) * 0.8)
+    train_df = cleaned.iloc[:split_idx].copy().reset_index(drop=True)
+    val_df = cleaned.iloc[split_idx:].copy().reset_index(drop=True)
+
+    # Fit fresh transformer on recent conditions
+    transformer = MobilityFeatureTransformer(top_locations_count=25)
+    transformer.fit(train_df)
+
+    X_train = transformer.transform_df(train_df).values.astype(np.float32)
+    y_train = train_df["is_congested_trip"].values.astype(np.int32)
+
+    X_val = transformer.transform_df(val_df).values.astype(np.float32)
+    y_val = val_df["is_congested_trip"].values.astype(np.int32)
+
+    n_features = X_train.shape[1]
+
+    clf = lgb.LGBMClassifier(
+        n_estimators=100,
+        learning_rate=0.05,
+        num_leaves=31,
+        random_state=42,
+        verbose=-1,
+    )
+    clf.fit(X_train, y_train)
+
+    y_val_proba = clf.predict_proba(X_val)[:, 1]
+    roc_auc = float(roc_auc_score(y_val, y_val_proba))
+    pr_auc = float(average_precision_score(y_val, y_val_proba))
+    opt_thresh, opt_f1, opt_prec, opt_rec = find_optimal_threshold(y_val, y_val_proba)
+
+    # Save artifacts
+    transformer_path = artifacts_dir / "transformer.joblib"
+    onnx_path = artifacts_dir / "mobility_model.onnx"
+    reference_path = artifacts_dir / "reference_data.parquet"
+    metadata_path = artifacts_dir / "metadata.json"
+
+    transformer.save(transformer_path)
+    export_to_onnx(clf, n_features=n_features, destination_path=onnx_path)
+
+    ref_sample = val_df.sample(n=min(2000, len(val_df)), random_state=42).copy()
+    ref_sample.to_parquet(reference_path)
+
+    metadata = {
+        "model_version": model_version,
+        "domain": "urban_mobility",
+        "target": "is_congested_trip",
+        "algorithm": "LightGBM",
+        "n_features": n_features,
+        "feature_names": transformer.feature_names_,
+        "metrics": {
+            "roc_auc": roc_auc,
+            "pr_auc": pr_auc,
+            "optimal_threshold": opt_thresh,
+            "optimal_f1": opt_f1,
+            "optimal_precision": opt_prec,
+            "optimal_recall": opt_rec,
+        },
+        "artifacts": {
+            "onnx_model": str(onnx_path),
+            "transformer": str(transformer_path),
+            "reference_data": str(reference_path),
+        },
+    }
+
+    with open(metadata_path, "w") as f:
+        json.dump(metadata, f, indent=2)
+
+    logger.info(
+        "Candidate %s retrained on recent window %s: ROC-AUC=%.4f, PR-AUC=%.4f, F1=%.4f",
+        model_version,
+        recent_month,
+        roc_auc,
+        pr_auc,
+        opt_f1,
+    )
+    return metadata
+
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     meta = train_mobility_pipeline()
