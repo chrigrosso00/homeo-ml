@@ -23,7 +23,11 @@ from sklearn.metrics import (
 
 from src.data.transformer import FraudFeatureTransformer
 
-DEFAULT_DATA_PATH: Path = Path("data/raw/Fraud_Data.csv")
+DEFAULT_DATA_PATH: Path = (
+    Path("data/raw/fraud/Fraud_Data.csv")
+    if Path("data/raw/fraud/Fraud_Data.csv").exists()
+    else Path("data/raw/Fraud_Data.csv")
+)
 DEFAULT_ARTIFACTS_DIR: Path = Path("artifacts/models")
 
 
