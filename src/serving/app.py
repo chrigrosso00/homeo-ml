@@ -18,6 +18,12 @@ from fastapi import FastAPI, HTTPException, status
 
 from src.data.schemas import PredictionResponse, TelemetryEvent, TransactionInput
 from src.data.transformer import FraudFeatureTransformer
+from src.domains.mobility.schemas import (
+    TripInput,
+    TripPredictionResponse,
+    TripTelemetryPayload,
+)
+from src.domains.mobility.transformer import MobilityFeatureTransformer
 from src.serving.telemetry import KafkaTelemetryProducer
 
 logger = logging.getLogger("serving.app")
@@ -25,6 +31,10 @@ logger = logging.getLogger("serving.app")
 DEFAULT_MODEL_PATH: Path = Path("artifacts/models/fraud_model.onnx")
 DEFAULT_TRANSFORMER_PATH: Path = Path("artifacts/models/transformer.joblib")
 DEFAULT_METADATA_PATH: Path = Path("artifacts/models/metadata.json")
+
+DEFAULT_MOBILITY_MODEL_PATH: Path = Path("artifacts/mobility/mobility_model.onnx")
+DEFAULT_MOBILITY_TRANSFORMER_PATH: Path = Path("artifacts/mobility/transformer.joblib")
+DEFAULT_MOBILITY_METADATA_PATH: Path = Path("artifacts/mobility/metadata.json")
 
 
 @asynccontextmanager
@@ -60,7 +70,33 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.model_version = metadata.get("model_version", "v1.0.0")
     app.state.optimal_threshold = float(metadata["metrics"].get("optimal_threshold", 0.5))
 
-    # 3. Initialize Redpanda telemetry producer
+    # 3. Load mobility model if available
+    if DEFAULT_MOBILITY_MODEL_PATH.exists() and DEFAULT_MOBILITY_TRANSFORMER_PATH.exists():
+        app.state.mobility_onnx_session = ort.InferenceSession(
+            str(DEFAULT_MOBILITY_MODEL_PATH), sess_options=session_options
+        )
+        app.state.mobility_onnx_input_name = app.state.mobility_onnx_session.get_inputs()[0].name
+        app.state.mobility_transformer = MobilityFeatureTransformer.load(
+            DEFAULT_MOBILITY_TRANSFORMER_PATH
+        )
+        if DEFAULT_MOBILITY_METADATA_PATH.exists():
+            with open(DEFAULT_MOBILITY_METADATA_PATH) as f:
+                mob_meta = json.load(f)
+            app.state.mobility_metadata = mob_meta
+            app.state.mobility_model_version = mob_meta.get("model_version", "v1.0.0")
+            app.state.mobility_optimal_threshold = float(
+                mob_meta["metrics"].get("optimal_threshold", 0.5)
+            )
+        else:
+            app.state.mobility_model_version = "v1.0.0"
+            app.state.mobility_optimal_threshold = 0.5
+        logger.info(
+            "Mobility Serving initialized: Model %s, Threshold %.4f",
+            app.state.mobility_model_version,
+            app.state.mobility_optimal_threshold,
+        )
+
+    # 4. Initialize Redpanda telemetry producer
     app.state.telemetry = KafkaTelemetryProducer()
 
     logger.info(
@@ -173,4 +209,65 @@ def predict(tx: TransactionInput) -> PredictionResponse:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Inference failure: {exc}",
+        ) from exc
+
+
+@app.post(
+    "/predict/mobility",
+    response_model=TripPredictionResponse,
+    status_code=status.HTTP_200_OK,
+)
+def predict_mobility(trip: TripInput) -> TripPredictionResponse:
+    """Predict traffic congestion and SLA breach for an urban mobility ride request.
+
+    Executes feature transformation, ONNX inference, and fires an asynchronous
+    telemetry event to Redpanda topic 'mobility.telemetry'.
+
+    Args:
+        trip: Validated TripInput payload.
+
+    Returns:
+        TripPredictionResponse with congestion decision and probability.
+    """
+    if not hasattr(app.state, "mobility_onnx_session"):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Mobility model is not loaded",
+        )
+
+    t0 = time.perf_counter()
+    try:
+        # 1. Feature extraction
+        features = app.state.mobility_transformer.transform_single(trip)
+
+        # 2. ONNX inference
+        outputs = app.state.mobility_onnx_session.run(
+            None, {app.state.mobility_onnx_input_name: features}
+        )
+        # outputs: [labels, [{0: p0, 1: p1}]]
+        prob_congested = float(outputs[1][0][1])
+        is_congested = prob_congested >= app.state.mobility_optimal_threshold
+
+        latency_ms = (time.perf_counter() - t0) * 1000.0
+
+        # 3. Fire-and-forget telemetry to Redpanda
+        res = TripPredictionResponse(
+            is_congested=is_congested,
+            congestion_probability=round(prob_congested, 5),
+            model_version=app.state.mobility_model_version,
+        )
+        payload = TripTelemetryPayload(
+            trip_input=trip,
+            prediction=res,
+            latency_ms=round(latency_ms, 3),
+        )
+        app.state.telemetry.dispatch(payload, topic="mobility.telemetry")
+
+        return res
+
+    except Exception as exc:
+        logger.error("Error during mobility prediction: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Mobility inference failure: {exc}",
         ) from exc

@@ -122,3 +122,21 @@ def test_telemetry_producer_graceful_fallback() -> None:
     # Must not raise an unhandled exception
     res = producer.dispatch(event)
     assert res in (True, False)
+
+
+def test_predict_mobility_endpoint(client: TestClient) -> None:
+    """Verify scoring a mobility ride request on /predict/mobility."""
+    trip_payload = {
+        "pickup_datetime": "2020-03-25T14:30:00",
+        "pickup_location_id": 161,
+        "dropoff_location_id": 236,
+        "trip_distance": 2.5,
+        "passenger_count": 1,
+    }
+    response = client.post("/predict/mobility", json=trip_payload)
+    assert response.status_code == 200
+    res = response.json()
+    assert "is_congested" in res
+    assert isinstance(res["is_congested"], bool)
+    assert 0.0 <= res["congestion_probability"] <= 1.0
+    assert res["model_version"] == "v1.0.0"

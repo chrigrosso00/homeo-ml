@@ -67,13 +67,14 @@ class KafkaTelemetryProducer:
         if err is not None:
             logger.warning("Telemetry delivery failure: %s", err)
 
-    def dispatch(self, event: TelemetryEvent) -> bool:
+    def dispatch(self, event: TelemetryEvent | Any, topic: str | None = None) -> bool:
         """Dispatch a telemetry event to Redpanda asynchronously.
 
         Execution completes in microseconds by appending to librdkafka memory queue.
 
         Args:
-            event: Validated TelemetryEvent instance.
+            event: Validated Pydantic model instance (TelemetryEvent or TripTelemetryPayload).
+            topic: Optional topic override (defaults to self.topic).
 
         Returns:
             True if queued successfully, False if failed or telemetry disabled.
@@ -81,11 +82,15 @@ class KafkaTelemetryProducer:
         if not self._is_connected or self._producer is None:
             return False
 
+        target_topic = topic or self.topic
         try:
             payload = event.model_dump_json().encode("utf-8")
+            event_key = getattr(event, "transaction_id", None) or getattr(
+                event, "timestamp", str(os.urandom(8))
+            )
             self._producer.produce(
-                topic=self.topic,
-                key=event.transaction_id.encode("utf-8"),
+                topic=target_topic,
+                key=str(event_key).encode("utf-8"),
                 value=payload,
                 on_delivery=self._delivery_report,
             )
