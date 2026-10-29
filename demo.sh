@@ -31,21 +31,23 @@ if command -v docker &>/dev/null; then
         echo "✔ Redpanda Event Broker is running."
     else
         echo "ℹ Starting Redpanda telemetry streaming broker..."
-        docker compose up -d
+        docker compose up -d redpanda console traefik
         sleep 3
     fi
 fi
 
 echo ""
-echo "Opzioni disponibili per il controllo dell'avanzamento:"
-echo "  • ./demo.sh --mode step       (avanza manualmente premendo [INVIO])"
-echo "  • ./demo.sh --mode auto       (avanza con pause temporizzate di 2s)"
-echo "  • ./demo.sh --mode fast       (esecuzione immediata senza pause)"
+echo "Opzioni disponibili per il dominio e il controllo dell'avanzamento:"
+echo "  • ./demo.sh --domain mobility   (NYC Taxi COVID-19 lockdown shock - default)"
+echo "  • ./demo.sh --domain fraud      (E-Commerce Botnet attack)"
+echo "  • ./demo.sh --mode step         (avanza manualmente premendo [INVIO])"
+echo "  • ./demo.sh --mode auto         (avanza con pause temporizzate di 2s - default)"
+echo "  • ./demo.sh --mode fast         (esecuzione immediata senza pause)"
 echo ""
 
-# Forward any user arguments or default to --mode auto --delay 2.0
+# Forward any user arguments or default to --domain mobility --mode auto --delay 2.0
 if [[ $# -eq 0 ]]; then
-    ARGS=(--mode auto --delay 2.0)
+    ARGS=(--domain mobility --mode auto --delay 2.0)
 else
     ARGS=("$@")
 fi
@@ -58,7 +60,7 @@ echo ""
 echo "================================================================================"
 echo "Observability Dashboards & Artifacts:"
 echo "  • Redpanda Console    : http://localhost:8080"
-echo "  • Evidently Drift HTML: file://${SCRIPT_DIR}/artifacts/monitoring/latest_drift_report.html"
+echo "  • Evidently Drift HTML: file://${SCRIPT_DIR}/artifacts/mobility/latest_drift_report.html"
 echo "  • Supervisor Audit Log: ${SCRIPT_DIR}/artifacts/supervisor/audit_trail.json"
 echo "  • Traefik Dynamic YML : ${SCRIPT_DIR}/config/traefik_dynamic.yml"
 echo "================================================================================"

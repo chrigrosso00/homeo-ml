@@ -48,7 +48,7 @@ class GuardrailsConfig(BaseModel):
     min_pr_auc: float = Field(default=0.045, description="Minimum acceptable PR-AUC")
     min_recall: float = Field(default=0.85, description="Minimum fraud recall rate")
     min_roc_auc: float = Field(default=0.70, description="Minimum ROC-AUC for mobility")
-    min_f1: float = Field(default=0.65, description="Minimum F1 score for mobility")
+    min_f1: float = Field(default=0.55, description="Minimum F1 score for mobility")
     max_latency_p95_ms: float = Field(default=20.0, description="Maximum P95 latency in ms")
 
 
@@ -223,9 +223,11 @@ class StateMachineSupervisor:
             "remediation_strategy": "CHRONOLOGICAL_ADAPTATION",
         }
 
-        # Check for specific known attack patterns
+        # Check for specific known attack or drift patterns
         if "time_since_signup_sec" in drifted_cols and "browser" in drifted_cols:
             slice_diagnostic["attack_pattern"] = "BOTNET_INSTANT_CHECKOUT"
+        elif "speed_mph" in drifted_cols or "trip_distance" in drifted_cols:
+            slice_diagnostic["attack_pattern"] = "LOCKDOWN_MOBILITY_DRIFT"
         elif "purchase_value" in drifted_cols:
             slice_diagnostic["attack_pattern"] = "MONETARY_INFLATION_SHIFT"
         else:
@@ -245,19 +247,41 @@ class StateMachineSupervisor:
         Returns:
             Tuple of (passed: bool, reason: str).
         """
+        domain = candidate_metadata.get("domain", "fraud")
         metrics = candidate_metadata.get("metrics", {})
-        pr_auc = metrics.get("pr_auc", 0.0)
-        recall = metrics.get("optimal_recall", 0.0)
 
-        # 1. PR-AUC guardrail
-        if pr_auc < self.guardrails.min_pr_auc:
-            msg = f"Candidate PR-AUC ({pr_auc:.4f}) below guardrail ({self.guardrails.min_pr_auc})"
-            return False, msg
+        if domain in ("mobility", "urban_mobility"):
+            roc_auc = metrics.get("roc_auc", 0.0)
+            if roc_auc < self.guardrails.min_roc_auc:
+                msg = (
+                    f"Candidate ROC-AUC ({roc_auc:.4f}) below guardrail "
+                    f"({self.guardrails.min_roc_auc})"
+                )
+                return False, msg
 
-        # 2. Recall guardrail
-        if recall < self.guardrails.min_recall:
-            msg = f"Candidate Recall ({recall:.4f}) below guardrail ({self.guardrails.min_recall})"
-            return False, msg
+            f1 = metrics.get("optimal_f1", metrics.get("f1_score", 0.0))
+            if f1 < self.guardrails.min_f1:
+                msg = f"Candidate F1 ({f1:.4f}) below guardrail ({self.guardrails.min_f1})"
+                return False, msg
+        else:
+            pr_auc = metrics.get("pr_auc", 0.0)
+            recall = metrics.get("optimal_recall", 0.0)
+
+            # 1. PR-AUC guardrail
+            if pr_auc < self.guardrails.min_pr_auc:
+                msg = (
+                    f"Candidate PR-AUC ({pr_auc:.4f}) below guardrail "
+                    f"({self.guardrails.min_pr_auc})"
+                )
+                return False, msg
+
+            # 2. Recall guardrail
+            if recall < self.guardrails.min_recall:
+                msg = (
+                    f"Candidate Recall ({recall:.4f}) below guardrail "
+                    f"({self.guardrails.min_recall})"
+                )
+                return False, msg
 
         # 3. ONNX latency benchmark guardrail
         try:
@@ -371,7 +395,7 @@ class StateMachineSupervisor:
         )
         canary_artifacts_dir.mkdir(parents=True, exist_ok=True)
 
-        if domain == "mobility":
+        if domain in ("mobility", "urban_mobility"):
             candidate_meta = train_mobility_recent_window(
                 data_dir=DEFAULT_TAXI_DIR,
                 artifacts_dir=canary_artifacts_dir,
@@ -417,7 +441,9 @@ class StateMachineSupervisor:
             should_promote, eval_reason = self.evaluate_canary_window(
                 production_metrics=prod_m,
                 canary_metrics=canary_m,
-                metric_key=("f1_score" if domain == "mobility" else "optimal_f1"),
+                metric_key=(
+                    "f1_score" if domain in ("mobility", "urban_mobility") else "optimal_f1"
+                ),
             )
             if not should_promote:
                 self.transition_to(

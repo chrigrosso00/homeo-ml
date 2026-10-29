@@ -86,6 +86,69 @@ def test_diagnose_slice_botnet_pattern(supervisor: StateMachineSupervisor) -> No
     assert diagnostic["attack_pattern"] == "BOTNET_INSTANT_CHECKOUT"
 
 
+def test_diagnose_slice_mobility_lockdown_pattern(supervisor: StateMachineSupervisor) -> None:
+    """Verify root cause diagnosis pinpoints lockdown mobility drift pattern."""
+    report = DriftReport(
+        window_size=300,
+        dataset_drift_detected=True,
+        share_of_drifted_features=0.6,
+        features_analyzed=5,
+        drifted_features=[
+            FeatureDriftDetail(
+                column="speed_mph",
+                method="Wasserstein distance (normed)",
+                score=0.48,
+                threshold=0.1,
+                is_drifted=True,
+            ),
+            FeatureDriftDetail(
+                column="trip_distance",
+                method="Wasserstein distance (normed)",
+                score=0.32,
+                threshold=0.1,
+                is_drifted=True,
+            ),
+        ],
+    )
+
+    diagnostic = supervisor.diagnose_slice(report)
+    assert "speed_mph" in diagnostic["drifted_features"]
+    assert diagnostic["attack_pattern"] == "LOCKDOWN_MOBILITY_DRIFT"
+
+
+def test_mobility_candidate_guardrails_validation(
+    supervisor: StateMachineSupervisor, tmp_path: Path
+) -> None:
+    """Verify candidate validation for mobility domain with ROC-AUC and F1."""
+    onnx_file = tmp_path / "mobility_dummy.onnx"
+    # Create empty dummy file
+    onnx_file.touch()
+
+    # Case 1: Pass
+    pass_meta = {
+        "domain": "mobility",
+        "metrics": {"roc_auc": 0.81, "optimal_f1": 0.58},
+        "n_features": 9,
+    }
+    # Mock ort.InferenceSession within validate_candidate
+    import unittest.mock as mock
+
+    with mock.patch("onnxruntime.InferenceSession"):
+        passed, reason = supervisor.validate_candidate(pass_meta, onnx_file)
+        assert passed is True
+        assert "passed" in reason
+
+    # Case 2: Fail ROC-AUC
+    fail_meta = {
+        "domain": "mobility",
+        "metrics": {"roc_auc": 0.65, "optimal_f1": 0.58},
+        "n_features": 9,
+    }
+    passed, reason = supervisor.validate_candidate(fail_meta, onnx_file)
+    assert passed is False
+    assert "ROC-AUC" in reason
+
+
 def test_guardrails_validation_rejection(
     supervisor: StateMachineSupervisor, tmp_path: Path
 ) -> None:
