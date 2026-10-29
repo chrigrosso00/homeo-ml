@@ -54,11 +54,12 @@ htmlcov/
 .pytest_cache/
 .ruff_cache/
 
-# Data & Model Artifacts (reproducible via pipelines or test fixtures)
+# Data & Ephemeral Artifacts
 data/
-artifacts/
-*.onnx
-*.joblib
+artifacts/monitoring/
+artifacts/supervisor/audit_trail.json
+artifacts/**/*.html
+artifacts/**/latest_drift_report.*
 *.pkl
 
 # Redpanda / Kafka data volumes
