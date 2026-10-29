@@ -235,8 +235,8 @@ def test_guardrails_failure_triggers_rollback(
     tmp_path: Path, traffic_manager: TrafficManager
 ) -> None:
     """Verify that if candidate model fails guardrails, supervisor executes rollback."""
-    # Custom guardrails with unattainable PR-AUC
-    strict_guardrails = GuardrailsConfig(min_pr_auc=0.99)
+    # Custom guardrails with unattainable PR-AUC (> 1.0)
+    strict_guardrails = GuardrailsConfig(min_pr_auc=1.05)
     strict_supervisor = StateMachineSupervisor(
         guardrails=strict_guardrails,
         traffic_manager=traffic_manager,

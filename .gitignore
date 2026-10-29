@@ -54,12 +54,12 @@ htmlcov/
 .pytest_cache/
 .ruff_cache/
 
-# Data & Models (tracked via DVC or MinIO/S3)
-data/raw/
-data/processed/
-artifacts/
-*.onnx
-*.joblib
+# Data & Ephemeral Artifacts
+data/
+artifacts/monitoring/
+artifacts/supervisor/audit_trail.json
+artifacts/**/*.html
+artifacts/**/latest_drift_report.*
 *.pkl
 
 # Redpanda / Kafka data volumes

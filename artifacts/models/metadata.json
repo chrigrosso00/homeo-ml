@@ -1,0 +1,72 @@
+{
+  "model_version": "v1.0.0",
+  "algorithm": "LightGBM",
+  "n_features": 41,
+  "feature_names": [
+    "purchase_value",
+    "age",
+    "time_since_signup_sec",
+    "is_instant_purchase",
+    "hour_of_day",
+    "day_of_week",
+    "device_sharing_count",
+    "sex_M",
+    "source_SEO",
+    "source_Ads",
+    "source_Direct",
+    "browser_Chrome",
+    "browser_Safari",
+    "browser_Firefox",
+    "browser_Opera",
+    "browser_IE",
+    "country_United_States",
+    "country_China",
+    "country_Japan",
+    "country_United_Kingdom",
+    "country_Korea_Republic_of",
+    "country_Germany",
+    "country_France",
+    "country_Canada",
+    "country_Brazil",
+    "country_Italy",
+    "country_Australia",
+    "country_Netherlands",
+    "country_Russian_Federation",
+    "country_India",
+    "country_Taiwan;_Republic_of_China_(ROC)",
+    "country_Mexico",
+    "country_Sweden",
+    "country_Spain",
+    "country_South_Africa",
+    "country_Switzerland",
+    "country_Poland",
+    "country_Argentina",
+    "country_Indonesia",
+    "country_Norway",
+    "country_Colombia"
+  ],
+  "metrics": {
+    "roc_auc": 0.5039637281261378,
+    "pr_auc": 0.048381242694485495,
+    "optimal_threshold": 0.11108863312569701,
+    "optimal_f1": 0.08832686073755495,
+    "optimal_precision": 0.04622413329750067,
+    "optimal_recall": 0.9906407487401008,
+    "default_threshold_f1": 0.007032348804500703
+  },
+  "train_period": {
+    "start": "2015-01-01 00:00:44",
+    "end": "2015-08-30 15:18:18",
+    "samples": 120889
+  },
+  "test_period": {
+    "start": "2015-08-30 15:18:56",
+    "end": "2015-12-16 02:56:05",
+    "samples": 30223
+  },
+  "artifacts": {
+    "onnx_model": "artifacts/models/fraud_model.onnx",
+    "transformer": "artifacts/models/transformer.joblib",
+    "reference_data": "artifacts/models/reference_data.parquet"
+  }
+}

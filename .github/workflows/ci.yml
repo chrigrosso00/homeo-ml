@@ -41,6 +41,10 @@ jobs:
         run: |
           ruff check .
 
+      - name: Ensure test fixtures and baseline artifacts
+        run: |
+          python -m scripts.generate_test_fixtures
+
       - name: Execute test suite (Pytest)
         run: |
           pytest -v

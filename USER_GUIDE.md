@@ -244,3 +244,4 @@ Se desideri eliminare anche i volumi persistenti:
 ```bash
 docker compose down -v
 ```
+
