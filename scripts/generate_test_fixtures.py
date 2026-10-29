@@ -62,7 +62,12 @@ def ensure_fraud_raw_fixtures() -> None:
                     "class": is_fraud,
                 }
             )
-        pd.DataFrame(records).to_csv(fraud_csv, index=False)
+        df_fraud = pd.DataFrame(records)
+        df_fraud.to_csv(fraud_csv, index=False)
+        # Also ensure legacy flat path exists for backward compatibility
+        legacy_csv = Path("data/raw/Fraud_Data.csv")
+        if not legacy_csv.exists():
+            df_fraud.to_csv(legacy_csv, index=False)
 
 
 def ensure_taxi_raw_fixtures() -> None:

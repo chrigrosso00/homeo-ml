@@ -45,7 +45,13 @@ def load_and_split_chronological(
     Returns:
         Tuple of (train_df, test_df) ordered chronologically.
     """
-    df = pd.read_csv(data_path)
+    actual_path = data_path
+    if not actual_path.exists():
+        if Path("data/raw/fraud/Fraud_Data.csv").exists():
+            actual_path = Path("data/raw/fraud/Fraud_Data.csv")
+        elif Path("data/raw/Fraud_Data.csv").exists():
+            actual_path = Path("data/raw/Fraud_Data.csv")
+    df = pd.read_csv(actual_path)
     df["purchase_time"] = pd.to_datetime(df["purchase_time"])
     df = df.sort_values("purchase_time").reset_index(drop=True)
 
