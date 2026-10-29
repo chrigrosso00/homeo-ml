@@ -12,6 +12,8 @@
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
 > **Enterprise-grade, closed-loop autonomous MLOps platform** that detects statistical distribution drift on live streaming traffic, diagnoses root-cause feature slices, retrains candidate models against strict guardrails, and executes zero-downtime canary rollouts via Traefik Weighted Round-Robin (WRR) ingress.
+>
+> 💡 **Guida Utente Dettagliata (Italiano)**: Per una guida operativa completa passo-passo sull'installazione, comandi Docker e demo interattive, consulta [USER_GUIDE.md](USER_GUIDE.md).
 
 ---
 
