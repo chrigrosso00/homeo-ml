@@ -47,6 +47,9 @@ conda activate mlops-runtime
 ```bash
 # Installa il runtime e tutti gli strumenti di sviluppo (pytest, ruff, black)
 pip install -e ".[dev]"
+
+# (Opzionale) Genera artefatti baseline minimi se vuoi avviare subito Docker senza dataset reali
+python -m scripts.generate_test_fixtures
 ```
 
 ---

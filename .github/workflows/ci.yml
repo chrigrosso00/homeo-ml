@@ -49,6 +49,13 @@ jobs:
         run: |
           pytest -v
 
+      - name: Archive model artifacts for Docker packaging
+        uses: actions/upload-artifact@v4
+        with:
+          name: baseline-artifacts
+          path: artifacts/
+          retention-days: 1
+
   docker-build:
     name: Docker Image Build Validation
     runs-on: ubuntu-latest
@@ -57,6 +64,12 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Download model artifacts from quality gate
+        uses: actions/download-artifact@v4
+        with:
+          name: baseline-artifacts
+          path: artifacts/
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
