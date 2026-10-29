@@ -6,6 +6,7 @@ telemetry events to Redpanda / Kafka.
 
 import json
 import logging
+import os
 import time
 import uuid
 from collections.abc import AsyncIterator
@@ -28,13 +29,23 @@ from src.serving.telemetry import KafkaTelemetryProducer
 
 logger = logging.getLogger("serving.app")
 
-DEFAULT_MODEL_PATH: Path = Path("artifacts/models/fraud_model.onnx")
-DEFAULT_TRANSFORMER_PATH: Path = Path("artifacts/models/transformer.joblib")
-DEFAULT_METADATA_PATH: Path = Path("artifacts/models/metadata.json")
+MODEL_DIR: Path = Path(os.getenv("MODEL_DIR", "artifacts/models"))
+DEFAULT_MODEL_PATH: Path = Path(os.getenv("MODEL_PATH", str(MODEL_DIR / "fraud_model.onnx")))
+DEFAULT_TRANSFORMER_PATH: Path = Path(
+    os.getenv("TRANSFORMER_PATH", str(MODEL_DIR / "transformer.joblib"))
+)
+DEFAULT_METADATA_PATH: Path = Path(os.getenv("METADATA_PATH", str(MODEL_DIR / "metadata.json")))
 
-DEFAULT_MOBILITY_MODEL_PATH: Path = Path("artifacts/mobility/mobility_model.onnx")
-DEFAULT_MOBILITY_TRANSFORMER_PATH: Path = Path("artifacts/mobility/transformer.joblib")
-DEFAULT_MOBILITY_METADATA_PATH: Path = Path("artifacts/mobility/metadata.json")
+MOBILITY_MODEL_DIR: Path = Path(os.getenv("MOBILITY_MODEL_DIR", "artifacts/mobility"))
+DEFAULT_MOBILITY_MODEL_PATH: Path = Path(
+    os.getenv("MOBILITY_MODEL_PATH", str(MOBILITY_MODEL_DIR / "mobility_model.onnx"))
+)
+DEFAULT_MOBILITY_TRANSFORMER_PATH: Path = Path(
+    os.getenv("MOBILITY_TRANSFORMER_PATH", str(MOBILITY_MODEL_DIR / "transformer.joblib"))
+)
+DEFAULT_MOBILITY_METADATA_PATH: Path = Path(
+    os.getenv("MOBILITY_METADATA_PATH", str(MOBILITY_MODEL_DIR / "metadata.json"))
+)
 
 
 @asynccontextmanager

@@ -44,6 +44,56 @@ services:
       - "8081:8080" # Traefik dashboard
     volumes:
       - ./config/traefik_dynamic.yml:/etc/traefik/dynamic.yml
+    depends_on:
+      - serving-prod
+
+  serving-prod:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: mlops-serving:latest
+    container_name: mlops-serving-prod
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=redpanda:29092
+      - MODEL_DIR=/app/artifacts/models
+      - MOBILITY_MODEL_DIR=/app/artifacts/mobility
+    ports:
+      - "8001:8000"
+    volumes:
+      - ./artifacts:/app/artifacts:ro
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  serving-canary:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: mlops-serving:latest
+    container_name: mlops-serving-canary
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=redpanda:29092
+      - MODEL_DIR=/app/artifacts/canary
+      - MOBILITY_MODEL_DIR=/app/artifacts/canary
+    ports:
+      - "8002:8000"
+    volumes:
+      - ./artifacts:/app/artifacts:ro
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
 volumes:
   redpanda_data:

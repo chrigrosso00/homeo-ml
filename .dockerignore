@@ -1,0 +1,29 @@
+# Git
+.git
+.github
+
+# Python cache and environments
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+miniforge3/
+
+# Test and linting artifacts
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Documentation and memory
+docs/
+MEMORY.md
+AGENTS.md
+*.md
+
+# Large raw datasets (not needed inside serving container)
+data/
