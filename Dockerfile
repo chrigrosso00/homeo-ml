@@ -49,3 +49,4 @@ HEALTHCHECK --interval=10s --timeout=5s --start-period=10s --retries=3 \
 
 # Launch low-latency uvicorn ASGI server
 CMD ["uvicorn", "src.serving.app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+
